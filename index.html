@@ -103,14 +103,17 @@
             flex: 1;
             position: relative;
             overflow: hidden;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        main .iframe-wrapper {
+            transform-origin: top left;
+            will-change: transform;
         }
 
         main iframe {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
             border: none;
             background: var(--bg);
         }
@@ -246,18 +249,37 @@
             }
 
             // ── Build iframe URL ──
-            const url = `${SHEET_BASE}?gid=${schedule.gid}&single=true`;
+            const url = `${SHEET_BASE}?gid=${schedule.gid}&single=true&rm=minimal&headers=false`;
 
             // ── Render iframe ──
+            const wrapper = document.createElement('div');
+            wrapper.className = 'iframe-wrapper';
+
             const iframe = document.createElement('iframe');
             iframe.src = url;
             iframe.title = `Vervangingsrooster — ${schedule.label}`;
             iframe.sandbox = 'allow-scripts allow-same-origin';
             iframe.allow = 'fullscreen';
             iframe.loading = 'eager';
+            // Render the iframe at a generous base size
+            iframe.width = '1200';
+            iframe.height = '900';
+
+            function scaleIframe() {
+                const mainW = main.clientWidth;
+                const mainH = main.clientHeight;
+                if (mainW <= 0 || mainH <= 0) return;
+                // Scale to fit width, height follows proportionally
+                const scale = Math.min(mainW / 1200, mainH / 900, 1);
+                wrapper.style.transform = `scale(${scale})`;
+                // Center vertically if scaled down
+                const scaledH = 900 * scale;
+                wrapper.style.marginTop = Math.max(0, (mainH - scaledH) / 2) + 'px';
+            }
 
             iframe.onload = function () {
                 dayBadge.textContent = schedule.label;
+                scaleIframe();
             };
 
             iframe.onerror = function () {
@@ -270,8 +292,15 @@
                 `;
             };
 
+            wrapper.appendChild(iframe);
             main.innerHTML = '';
-            main.appendChild(iframe);
+            main.appendChild(wrapper);
+
+            window.addEventListener('resize', scaleIframe);
+            // Also scale on orientation change (mobile)
+            window.addEventListener('orientationchange', function () {
+                setTimeout(scaleIframe, 200);
+            });
         })();
     </script>
 
