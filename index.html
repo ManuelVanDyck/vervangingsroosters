@@ -22,6 +22,12 @@
             --text-secondary: #555;
             --shadow: 0 2px 12px rgba(0,0,0,0.15);
             --border: #e0e0e0;
+
+            /* ── 42" TV-optimized header sizes ── */
+            --header-height: 80px;
+            --logo-size: 1.8rem;
+            --badge-size: 1rem;
+            --clock-size: 0.95rem;
         }
 
         @media (prefers-color-scheme: dark) {
@@ -54,9 +60,9 @@
         header {
             background: var(--header-bg);
             color: var(--header-text);
-            padding: 0 24px;
-            height: 56px;
-            min-height: 56px;
+            padding: 0 32px;
+            height: var(--header-height);
+            min-height: var(--header-height);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -68,11 +74,11 @@
         .header-left {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 20px;
         }
 
         .logo {
-            font-size: 1.2rem;
+            font-size: var(--logo-size);
             font-weight: 700;
             letter-spacing: -0.02em;
             color: var(--header-text);
@@ -85,40 +91,38 @@
         .day-badge {
             background: var(--day-badge-bg);
             color: var(--day-badge-text);
-            padding: 4px 14px;
-            border-radius: 20px;
-            font-size: 0.85rem;
+            padding: 6px 20px;
+            border-radius: 24px;
+            font-size: var(--badge-size);
             font-weight: 600;
             white-space: nowrap;
         }
 
         .header-right {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            opacity: 0.7;
+            font-size: var(--clock-size);
+            color: var(--header-text);
+            opacity: 0.8;
+            font-variant-numeric: tabular-nums;
         }
 
-        /* ── Main / Iframe zone ── */
+        /* ── Main / Iframe ── */
         main {
             flex: 1;
             position: relative;
             overflow: hidden;
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-        }
-
-        main .iframe-wrapper {
-            transform-origin: top left;
-            will-change: transform;
         }
 
         main iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             border: none;
             background: var(--bg);
         }
 
-        /* ── Weekend / no-schedule state ── */
+        /* ── Weekend / no-schedule ── */
         .no-schedule {
             display: flex;
             flex-direction: column;
@@ -126,26 +130,26 @@
             justify-content: center;
             height: 100%;
             text-align: center;
-            padding: 32px;
+            padding: 48px;
         }
 
         .no-schedule .icon {
-            font-size: 4rem;
-            margin-bottom: 16px;
+            font-size: 6rem;
+            margin-bottom: 24px;
             opacity: 0.6;
         }
 
         .no-schedule h2 {
-            font-size: clamp(1.4rem, 3vw, 2rem);
+            font-size: clamp(1.8rem, 3vw, 2.8rem);
             font-weight: 700;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
             color: var(--text);
         }
 
         .no-schedule p {
-            font-size: clamp(0.95rem, 1.8vw, 1.15rem);
+            font-size: clamp(1.1rem, 2vw, 1.5rem);
             color: var(--text-secondary);
-            max-width: 400px;
+            max-width: 500px;
             line-height: 1.5;
         }
 
@@ -158,9 +162,9 @@
         }
 
         .spinner {
-            width: 36px;
-            height: 36px;
-            border: 3px solid var(--border);
+            width: 48px;
+            height: 48px;
+            border: 4px solid var(--border);
             border-top-color: var(--accent);
             border-radius: 50%;
             animation: spin 0.7s linear infinite;
@@ -170,19 +174,22 @@
             to { transform: rotate(360deg); }
         }
 
-        /* ── Responsive tweaks ── */
-        @media (max-width: 480px) {
-            header {
-                padding: 0 14px;
-                height: 48px;
-                min-height: 48px;
+        /* ── Mobile: compact header ── */
+        @media (max-width: 768px) {
+            :root {
+                --header-height: 56px;
+                --logo-size: 1.2rem;
+                --badge-size: 0.8rem;
+                --clock-size: 0.75rem;
             }
-            .logo {
-                font-size: 1rem;
+            header {
+                padding: 0 16px;
+            }
+            .header-left {
+                gap: 12px;
             }
             .day-badge {
-                font-size: 0.75rem;
-                padding: 3px 10px;
+                padding: 4px 14px;
             }
         }
     </style>
@@ -230,14 +237,13 @@
 
             // ── Day detection ──
             const today = new Date();
-            const dayIndex = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+            const dayIndex = today.getDay();
             const dayName = DAY_NAMES[dayIndex];
             const schedule = SCHEDULES[dayIndex];
 
             dayBadge.textContent = dayName;
 
             if (!schedule) {
-                // ── Weekend / no schedule ──
                 main.innerHTML = `
                     <div class="no-schedule">
                         <div class="icon">🏖️</div>
@@ -248,12 +254,8 @@
                 return;
             }
 
-            // ── Build iframe URL ──
+            // ── Build iframe ──
             const url = `${SHEET_BASE}?gid=${schedule.gid}&single=true&rm=minimal&headers=false`;
-
-            // ── Render iframe ──
-            const wrapper = document.createElement('div');
-            wrapper.className = 'iframe-wrapper';
 
             const iframe = document.createElement('iframe');
             iframe.src = url;
@@ -261,25 +263,9 @@
             iframe.sandbox = 'allow-scripts allow-same-origin';
             iframe.allow = 'fullscreen';
             iframe.loading = 'eager';
-            // Render the iframe at a generous base size
-            iframe.width = '1200';
-            iframe.height = '900';
-
-            function scaleIframe() {
-                const mainW = main.clientWidth;
-                const mainH = main.clientHeight;
-                if (mainW <= 0 || mainH <= 0) return;
-                // Scale to fit width, height follows proportionally
-                const scale = Math.min(mainW / 1200, mainH / 900, 1);
-                wrapper.style.transform = `scale(${scale})`;
-                // Center vertically if scaled down
-                const scaledH = 900 * scale;
-                wrapper.style.marginTop = Math.max(0, (mainH - scaledH) / 2) + 'px';
-            }
 
             iframe.onload = function () {
                 dayBadge.textContent = schedule.label;
-                scaleIframe();
             };
 
             iframe.onerror = function () {
@@ -292,15 +278,8 @@
                 `;
             };
 
-            wrapper.appendChild(iframe);
             main.innerHTML = '';
-            main.appendChild(wrapper);
-
-            window.addEventListener('resize', scaleIframe);
-            // Also scale on orientation change (mobile)
-            window.addEventListener('orientationchange', function () {
-                setTimeout(scaleIframe, 200);
-            });
+            main.appendChild(iframe);
         })();
     </script>
 
