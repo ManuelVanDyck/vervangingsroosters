@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vervangingsrooster</title>
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #ffffff;
+            --header-bg: #1a1a2e;
+            --header-text: #ffffff;
+            --accent: #e94560;
+            --day-badge-bg: #16213e;
+            --day-badge-text: #e94560;
+            --text: #1a1a2e;
+            --text-secondary: #555;
+            --shadow: 0 2px 12px rgba(0,0,0,0.15);
+            --border: #e0e0e0;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0f0f1a;
+                --header-bg: #0a0a15;
+                --header-text: #e0e0e0;
+                --accent: #ff6b81;
+                --day-badge-bg: #1a1a30;
+                --day-badge-text: #ff6b81;
+                --text: #e0e0e0;
+                --text-secondary: #999;
+                --shadow: 0 2px 12px rgba(0,0,0,0.4);
+                --border: #2a2a3a;
+            }
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Header ── */
+        header {
+            background: var(--header-bg);
+            color: var(--header-text);
+            padding: 0 24px;
+            height: 56px;
+            min-height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow);
+            z-index: 10;
+            position: relative;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--header-text);
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .day-badge {
+            background: var(--day-badge-bg);
+            color: var(--day-badge-text);
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .header-right {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            opacity: 0.7;
+        }
+
+        /* ── Main / Iframe zone ── */
+        main {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        main iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: var(--bg);
+        }
+
+        /* ── Weekend / no-schedule state ── */
+        .no-schedule {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 32px;
+        }
+
+        .no-schedule .icon {
+            font-size: 4rem;
+            margin-bottom: 16px;
+            opacity: 0.6;
+        }
+
+        .no-schedule h2 {
+            font-size: clamp(1.4rem, 3vw, 2rem);
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+
+        .no-schedule p {
+            font-size: clamp(0.95rem, 1.8vw, 1.15rem);
+            color: var(--text-secondary);
+            max-width: 400px;
+            line-height: 1.5;
+        }
+
+        /* ── Loading ── */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+
+        .spinner {
+            width: 36px;
+            height: 36px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ── Responsive tweaks ── */
+        @media (max-width: 480px) {
+            header {
+                padding: 0 14px;
+                height: 48px;
+                min-height: 48px;
+            }
+            .logo {
+                font-size: 1rem;
+            }
+            .day-badge {
+                font-size: 0.75rem;
+                padding: 3px 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-left">
+            <div class="logo">📋 Vervangings<span>rooster</span></div>
+            <div class="day-badge" id="dayBadge">…</div>
+        </div>
+        <div class="header-right" id="clock">--:--</div>
+    </header>
+
+    <main id="main">
+        <div class="loading"><div class="spinner"></div></div>
+    </main>
+
+    <script>
+        (function () {
+            // ── Google Sheets URLs per weekday ──
+            const SHEET_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR5N6LWtAsfe7-2Wl1YCGnv6PaPwlxwTcEtLWGQETjLrnjpPvr5FsDanXo_QXAc74uanJLhb9fZ4g_w/pubhtml';
+
+            const SCHEDULES = {
+                1: { gid: '702076612',  label: 'Maandag' },
+                2: { gid: '454824552',  label: 'Dinsdag' },
+                3: { gid: '1769592879', label: 'Woensdag' },
+                4: { gid: '1340590586', label: 'Donderdag' },
+                5: { gid: '4978925',    label: 'Vrijdag' },
+            };
+
+            const DAY_NAMES = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
+
+            const main = document.getElementById('main');
+            const dayBadge = document.getElementById('dayBadge');
+            const clockEl = document.getElementById('clock');
+
+            // ── Clock ──
+            function updateClock() {
+                const now = new Date();
+                clockEl.textContent = now.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+            }
+            updateClock();
+            setInterval(updateClock, 10000);
+
+            // ── Day detection ──
+            const today = new Date();
+            const dayIndex = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+            const dayName = DAY_NAMES[dayIndex];
+            const schedule = SCHEDULES[dayIndex];
+
+            dayBadge.textContent = dayName;
+
+            if (!schedule) {
+                // ── Weekend / no schedule ──
+                main.innerHTML = `
+                    <div class="no-schedule">
+                        <div class="icon">🏖️</div>
+                        <h2>Geen rooster vandaag</h2>
+                        <p>Het is ${dayName.toLowerCase()}. Het vervangingsrooster is er weer op maandag.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // ── Build iframe URL ──
+            const url = `${SHEET_BASE}?gid=${schedule.gid}&single=true`;
+
+            // ── Render iframe ──
+            const iframe = document.createElement('iframe');
+            iframe.src = url;
+            iframe.title = `Vervangingsrooster — ${schedule.label}`;
+            iframe.sandbox = 'allow-scripts allow-same-origin';
+            iframe.allow = 'fullscreen';
+            iframe.loading = 'eager';
+
+            iframe.onload = function () {
+                dayBadge.textContent = schedule.label;
+            };
+
+            iframe.onerror = function () {
+                main.innerHTML = `
+                    <div class="no-schedule">
+                        <div class="icon">⚠️</div>
+                        <h2>Rooster kan niet geladen worden</h2>
+                        <p>Controleer of de Google Sheet nog gepubliceerd is.</p>
+                    </div>
+                `;
+            };
+
+            main.innerHTML = '';
+            main.appendChild(iframe);
+        })();
+    </script>
+
+</body>
+</html>
