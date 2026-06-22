@@ -22,8 +22,12 @@
             --text-secondary: #555;
             --shadow: 0 2px 12px rgba(0,0,0,0.15);
             --border: #e0e0e0;
+            --table-header-bg: #16213e;
+            --table-header-text: #ffffff;
+            --table-row-alt: #f5f6fa;
+            --table-row-hover: #eef0f5;
+            --time-col-bg: #e8eaf0;
 
-            /* ── 42" TV-optimized header sizes ── */
             --header-height: 80px;
             --logo-size: 1.8rem;
             --badge-size: 1rem;
@@ -42,6 +46,11 @@
                 --text-secondary: #999;
                 --shadow: 0 2px 12px rgba(0,0,0,0.4);
                 --border: #2a2a3a;
+                --table-header-bg: #0d0d1a;
+                --table-header-text: #e0e0e0;
+                --table-row-alt: #161624;
+                --table-row-hover: #1c1c2e;
+                --time-col-bg: #11111e;
             }
         }
 
@@ -105,22 +114,66 @@
             font-variant-numeric: tabular-nums;
         }
 
-        /* ── Main / Iframe ── */
+        /* ── Schedule table ── */
         main {
             flex: 1;
-            position: relative;
             overflow: hidden;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
         }
 
-        main iframe {
-            position: absolute;
-            top: -52px;  /* hides Google Sheets tab-title bar */
-            left: 0;
+        .schedule-table {
+            flex: 1;
             width: 100%;
-            height: calc(100% + 52px);
-            border: none;
-            background: var(--bg);
-            clip-path: inset(52px 0 0 0);  /* safety: prevent content from spilling above */
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .schedule-table thead th {
+            background: var(--table-header-bg);
+            color: var(--table-header-text);
+            font-size: clamp(1rem, 1.8vw, 1.5rem);
+            font-weight: 600;
+            padding: 16px 12px;
+            text-align: left;
+            border-bottom: 2px solid var(--accent);
+            position: sticky;
+            top: 0;
+        }
+
+        .schedule-table tbody td {
+            font-size: clamp(0.9rem, 1.5vw, 1.4rem);
+            padding: 14px 12px;
+            border-bottom: 1px solid var(--border);
+            line-height: 1.5;
+            vertical-align: middle;
+            word-wrap: break-word;
+            white-space: pre-line;
+        }
+
+        .schedule-table tbody tr:nth-child(even) td {
+            background: var(--table-row-alt);
+        }
+
+        /* Column B (time slot) — emphasised */
+        .schedule-table tbody td.time-col {
+            background: var(--time-col-bg);
+            font-weight: 700;
+            color: var(--text);
+            white-space: nowrap;
+        }
+
+        /* First column slightly narrower */
+        .schedule-table th:first-child,
+        .schedule-table td:first-child {
+            width: 18%;
+        }
+
+        /* Empty cells get a subtle dash */
+        .schedule-table tbody td:empty::after {
+            content: '—';
+            opacity: 0.3;
         }
 
         /* ── Weekend / no-schedule ── */
@@ -129,7 +182,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100%;
+            flex: 1;
             text-align: center;
             padding: 48px;
         }
@@ -159,7 +212,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100%;
+            flex: 1;
         }
 
         .spinner {
@@ -175,7 +228,23 @@
             to { transform: rotate(360deg); }
         }
 
-        /* ── Mobile: compact header ── */
+        /* ── Error ── */
+        .error-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            text-align: center;
+            padding: 48px;
+        }
+
+        .error-state .icon {
+            font-size: 5rem;
+            margin-bottom: 20px;
+        }
+
+        /* ── Mobile ── */
         @media (max-width: 768px) {
             :root {
                 --header-height: 56px;
@@ -191,6 +260,14 @@
             }
             .day-badge {
                 padding: 4px 14px;
+            }
+            .schedule-table thead th {
+                font-size: 0.85rem;
+                padding: 8px 6px;
+            }
+            .schedule-table tbody td {
+                font-size: 0.75rem;
+                padding: 8px 6px;
             }
         }
     </style>
@@ -211,15 +288,16 @@
 
     <script>
         (function () {
-            // ── Google Sheets URLs per weekday ──
-            const SHEET_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR5N6LWtAsfe7-2Wl1YCGnv6PaPwlxwTcEtLWGQETjLrnjpPvr5FsDanXo_QXAc74uanJLhb9fZ4g_w/pubhtml';
+            // ── Config ──
+            const CSV_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR5N6LWtAsfe7-2Wl1YCGnv6PaPwlxwTcEtLWGQETjLrnjpPvr5FsDanXo_QXAc74uanJLhb9fZ4g_w/pub';
 
+            // gid + cell range per weekday
             const SCHEDULES = {
-                1: { gid: '702076612',  label: 'Maandag' },
-                2: { gid: '454824552',  label: 'Dinsdag' },
-                3: { gid: '1769592879', label: 'Woensdag' },
-                4: { gid: '1340590586', label: 'Donderdag' },
-                5: { gid: '4978925',    label: 'Vrijdag' },
+                1: { gid: '702076612',  label: 'Maandag',   range: { startRow: 4, endRow: 12, startCol: 1, endCol: 6 } },
+                2: { gid: '454824552',  label: 'Dinsdag',   range: { startRow: 4, endRow: 12, startCol: 1, endCol: 6 } },
+                3: { gid: '1769592879', label: 'Woensdag',  range: { startRow: 4, endRow: 9,  startCol: 1, endCol: 6 } },
+                4: { gid: '1340590586', label: 'Donderdag', range: { startRow: 4, endRow: 12, startCol: 1, endCol: 6 } },
+                5: { gid: '4978925',    label: 'Vrijdag',   range: { startRow: 4, endRow: 12, startCol: 1, endCol: 6 } },
             };
 
             const DAY_NAMES = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
@@ -235,6 +313,113 @@
             }
             updateClock();
             setInterval(updateClock, 10000);
+
+            // ── CSV parser (handles quoted fields, embedded newlines) ──
+            function parseCSV(text) {
+                const rows = [];
+                let row = [];
+                let cell = '';
+                let inQuotes = false;
+
+                for (let i = 0; i < text.length; i++) {
+                    const ch = text[i];
+
+                    if (inQuotes) {
+                        if (ch === '"') {
+                            if (text[i + 1] === '"') {
+                                cell += '"';
+                                i++;
+                            } else {
+                                inQuotes = false;
+                            }
+                        } else {
+                            cell += ch;
+                        }
+                    } else {
+                        if (ch === '"') {
+                            inQuotes = true;
+                        } else if (ch === ',') {
+                            row.push(cell);
+                            cell = '';
+                        } else if (ch === '\n') {
+                            row.push(cell);
+                            rows.push(row);
+                            row = [];
+                            cell = '';
+                        } else if (ch !== '\r') {
+                            cell += ch;
+                        }
+                    }
+                }
+                // Last cell/row
+                if (cell.length > 0 || row.length > 0) {
+                    row.push(cell);
+                    rows.push(row);
+                }
+                return rows;
+            }
+
+            // ── Extract cells from parsed CSV ──
+            function extractRange(csvData, range) {
+                const { startRow, endRow, startCol, endCol } = range;
+                const result = [];
+                // CSV rows are 0-indexed, spreadsheet rows are 1-indexed
+                for (let r = startRow - 1; r <= endRow - 1 && r < csvData.length; r++) {
+                    const csvRow = csvData[r] || [];
+                    const extracted = [];
+                    for (let c = startCol; c <= endCol; c++) {
+                        extracted.push((csvRow[c] || '').trim());
+                    }
+                    // Skip fully empty rows
+                    if (extracted.some(v => v.length > 0)) {
+                        result.push(extracted);
+                    }
+                }
+                return result;
+            }
+
+            // ── Detect if row is a header row ──
+            function looksLikeHeader(cells) {
+                const joined = cells.join(' ').toUpperCase();
+                return joined.includes('LESUUR') || joined.includes('AFWEZIGE') || joined.includes('STUDIE');
+            }
+
+            // ── Render table ──
+            function renderTable(data) {
+                let html = '<table class="schedule-table">';
+
+                data.forEach((row, rowIdx) => {
+                    // If row looks like header, render as thead
+                    if (rowIdx === 0 && looksLikeHeader(row)) {
+                        html += '<thead><tr>';
+                        row.forEach(cell => {
+                            html += `<th>${escapeHtml(cell)}</th>`;
+                        });
+                        html += '</tr></thead><tbody>';
+                    } else {
+                        html += '<tr>';
+                        row.forEach((cell, colIdx) => {
+                            const cls = colIdx === 0 ? ' class="time-col"' : '';
+                            html += `<td${cls}>${escapeHtml(cell)}</td>`;
+                        });
+                        html += '</tr>';
+                    }
+                });
+
+                // Close tbody if we had a header, otherwise wrap body rows
+                if (data.length > 0 && looksLikeHeader(data[0])) {
+                    html += '</tbody>';
+                }
+
+                html += '</table>';
+                return html;
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
 
             // ── Day detection ──
             const today = new Date();
@@ -255,32 +440,47 @@
                 return;
             }
 
-            // ── Build iframe ──
-            const url = `${SHEET_BASE}?gid=${schedule.gid}&single=true&rm=minimal&headers=false`;
+            // ── Fetch CSV and render ──
+            const csvUrl = `${CSV_BASE}?gid=${schedule.gid}&single=true&output=csv`;
 
-            const iframe = document.createElement('iframe');
-            iframe.src = url;
-            iframe.title = `Vervangingsrooster — ${schedule.label}`;
-            iframe.sandbox = 'allow-scripts allow-same-origin';
-            iframe.allow = 'fullscreen';
-            iframe.loading = 'eager';
+            fetch(csvUrl)
+                .then(res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.text();
+                })
+                .then(csvText => {
+                    const csvData = parseCSV(csvText);
+                    const cellData = extractRange(csvData, schedule.range);
 
-            iframe.onload = function () {
-                dayBadge.textContent = schedule.label;
-            };
+                    if (cellData.length === 0) {
+                        main.innerHTML = `
+                            <div class="no-schedule">
+                                <div class="icon">📭</div>
+                                <h2>Geen vervangingen vandaag</h2>
+                                <p>Het rooster is leeg voor ${schedule.label.toLowerCase()}.</p>
+                            </div>
+                        `;
+                        return;
+                    }
 
-            iframe.onerror = function () {
-                main.innerHTML = `
-                    <div class="no-schedule">
-                        <div class="icon">⚠️</div>
-                        <h2>Rooster kan niet geladen worden</h2>
-                        <p>Controleer of de Google Sheet nog gepubliceerd is.</p>
-                    </div>
-                `;
-            };
+                    main.innerHTML = renderTable(cellData);
+                    dayBadge.textContent = schedule.label;
+                })
+                .catch(err => {
+                    console.error('Fetch error:', err);
+                    main.innerHTML = `
+                        <div class="error-state">
+                            <div class="icon">⚠️</div>
+                            <h2>Rooster kan niet geladen worden</h2>
+                            <p style="font-size:1.2rem;color:var(--text-secondary);">${escapeHtml(err.message)}</p>
+                        </div>
+                    `;
+                });
 
-            main.innerHTML = '';
-            main.appendChild(iframe);
+            // ── Auto-refresh every 5 minutes ──
+            setInterval(function () {
+                location.reload();
+            }, 5 * 60 * 1000);
         })();
     </script>
 
