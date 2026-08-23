@@ -125,6 +125,7 @@
 
         .schedule-table {
             flex: 1;
+            height: 100%;
             width: 100%;
             border-collapse: collapse;
             table-layout: fixed;
@@ -175,6 +176,16 @@
         .schedule-table tbody td:empty::after {
             content: '—';
             opacity: 0.3;
+        }
+
+        /* ── Past rows fade out ── */
+        .schedule-table tbody tr.past {
+            opacity: 0;
+            transform: translateY(-6px);
+        }
+
+        .schedule-table tbody tr {
+            transition: opacity 0.6s ease, transform 0.6s ease;
         }
 
         /* ── Weekend / no-schedule ── */
@@ -428,6 +439,48 @@
             const dayName = DAY_NAMES[dayIndex];
             const schedule = SCHEDULES[dayIndex];
 
+            // ── Parse "08.25u-09.15u" → end minutes ──
+            function parseTimeSlot(text) {
+                const m = text.match(/(\d{1,2})\.(\d{2})u\s*-\s*(\d{1,2})\.(\d{2})u/);
+                if (!m) return null;
+                return { start: parseInt(m[1]) * 60 + parseInt(m[2]), end: parseInt(m[3]) * 60 + parseInt(m[4]) };
+            }
+
+            // ── Hide rows whose lesson has ended ──
+            function updatePastRows(initial) {
+                const now = new Date();
+                const nowMin = now.getHours() * 60 + now.getMinutes();
+                const rows = document.querySelectorAll('.schedule-table tbody tr');
+                let visible = 0;
+
+                rows.forEach(function (tr) {
+                    if (tr.classList.contains('past')) return;
+                    const timeCell = tr.querySelector('td.time-col');
+                    if (!timeCell) return;
+                    const slot = parseTimeSlot(timeCell.textContent);
+                    if (slot && nowMin >= slot.end) {
+                        tr.classList.add('past');
+                        if (initial) {
+                            tr.style.display = 'none';
+                        } else {
+                            setTimeout(function () { tr.style.display = 'none'; }, 650);
+                        }
+                    }
+                    if (!tr.classList.contains('past')) visible++;
+                });
+
+                // All lessons finished → friendly end-of-day message
+                if (visible === 0 && rows.length > 0) {
+                    main.innerHTML = `
+                        <div class="no-schedule">
+                            <div class="icon">🏁</div>
+                            <h2>School dag zit erop</h2>
+                            <p>Alle lesuren zijn afgelopen. Tot morgen!</p>
+                        </div>
+                    `;
+                }
+            }
+
             dayBadge.textContent = dayName;
 
             if (!schedule) {
@@ -466,6 +519,8 @@
 
                     main.innerHTML = renderTable(cellData);
                     dayBadge.textContent = schedule.label;
+                    updatePastRows(true);
+                    setInterval(function () { updatePastRows(false); }, 30000);
                 })
                 .catch(err => {
                     console.error('Fetch error:', err);
