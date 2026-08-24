@@ -270,6 +270,14 @@
             display: block;
         }
 
+        /* Drive-thumbnail <img> (fallback, werkt op élke WebView) */
+        .pdf-canvas-container.img-mode .pdf-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
         body.mode-split .melding-body iframe { min-height: 0; }
         body.mode-full  .melding-body iframe { flex: 1; }
 
@@ -539,31 +547,27 @@
             }
 
             // Drive-link omzetten:
+            //  - fileId     → voor de thumbnail-<img> (fallback, werkt overal)
             //  - downloadUrl → directe bytes voor PDF.js (CORS-vriendelijk)
-            //  - previewUrl  → Google-viewer voor iframe-fallback (werkt op desktops)
             function drivePdfUrls(rawUrl) {
-                if (!rawUrl) return { downloadUrl: null, previewUrl: null };
+                if (!rawUrl) return { fileId: null, downloadUrl: null };
                 const u = String(rawUrl).trim();
                 let id = null;
                 let m = u.match(/drive\.google\.com\/file\/d\/([^/?#]+)/);
                 if (m) id = m[1];
                 if (!id) {
                     // ook eigen download-URL's (drive.usercontent.google.com) herkennen
-                    m = u.match(/[?&]id=([^&#]+)/);
-                    if (m && u.includes('drive.google.com')) id = m[1];
-                    if (!id) {
-                        m = u.match(/drive\.usercontent\.google\.com\/download\?id=([^&#]+)/);
-                        if (m) id = m[1];
-                    }
+                    m = u.match(/drive\.usercontent\.google\.com\/download\?id=([^&#]+)/);
+                    if (m) id = m[1];
                 }
                 if (id) {
                     return {
+                        fileId: id,
                         downloadUrl: 'https://drive.usercontent.google.com/download?id=' + id + '&export=download',
-                        previewUrl: 'https://drive.google.com/file/d/' + id + '/preview',
                     };
                 }
-                // directe PDF-link elders: beide hetzelfde
-                return { downloadUrl: u, previewUrl: u };
+                // directe PDF-link elders
+                return { fileId: null, downloadUrl: u };
             }
 
             function toEmbeddablePdf(url) {
@@ -627,25 +631,42 @@
             }
 
             // ── PDF-rendering ──
-            // Strategie: PDF.js op canvas (signage-safe) met de directe download-URL.
-            // Lukt dat niet → iframe met de Google /preview-viewer (desktop-safe).
-            function renderPdf(container, url, titel) {
+            // Strategie (robuust op signage-WebViews zoals Pico XI):
+            //  1. Drive-thumbnail <img> — gewoon een afbeelding, geen viewer, geen
+            //     CORS, geen fetch. Werkt op élke browser, hoe oud ook.
+            //     (toont pagina 1; meerdere pagina's: afzonderlijke melding-rijen)
+            //  2. PDF.js canvas (desktop-verfijning): haalt de echte PDF-binair op
+            //     en rendert met paging. Gebruikt dezelfde download-URL.
+            function renderPdf(container, url, thumbnailMode) {
                 const urls = drivePdfUrls(url);
                 const downloadUrl = urls.downloadUrl;
-                const previewUrl = urls.previewUrl;
+                const fileId = urls.fileId;
 
-                const showIframeFallback = () => {
+                // Fallback-<img> via Google's thumbnail-dienst
+                const showImgFallback = () => {
                     container.innerHTML = '';
-                    const fb = document.createElement('iframe');
-                    fb.src = previewUrl;
-                    fb.title = titel || 'Melding';
-                    container.appendChild(fb);
+                    const img = document.createElement('img');
+                    img.className = 'pdf-img';
+                    img.src = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w2000';
+                    img.alt = thumbnailMode || 'Melding';
+                    img.onerror = () => { img.remove(); };
+                    container.appendChild(img);
+                    container.classList.add('img-mode');
                 };
 
+                // Geen PDF.js of geen directe URL → thumbnail-<img> (werkt overal)
                 if (!window.pdfjsLib || !downloadUrl) {
-                    showIframeFallback();
+                    showImgFallback();
                     return;
                 }
+                // Drive-bestand: altijd de thumbnail-img — geen viewer die kan
+                // crashen (Pico XI), geen CORS-afhankelijkheid, werkt letterlijk
+                // overal. Meer pagina's → afzonderlijke melding-rijen per pagina.
+                if (fileId) {
+                    showImgFallback();
+                    return;
+                }
+
                 const canvas = document.createElement('canvas');
                 canvas.className = 'pdf-canvas';
                 container.appendChild(canvas);
@@ -678,7 +699,7 @@
                     }
                 }).catch(err => {
                     console.warn('PDF.js kon de PDF niet laden:', err.message);
-                    showIframeFallback();
+                    showImgFallback();
                 });
             }
 
