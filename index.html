@@ -365,11 +365,10 @@
             };
 
             // ── MELDINGEN ──
-            // gid van het tabblad "Meldingen" in het Google Sheet.
-            // Nog niet ingesteld → meldingen-functionaliteit staat uit.
-            // Zo vind je de gid: open het gepubliceerde tabblad, kijk naar
-            // ?gid=XXXX in de URL, en vul die hier in.
-            const MELDINGEN_GID = null;
+            // Publieke CSV van het tabblad "Meldingen".
+            // Kolommen (volgorde onbelangrijk, herkend op kolomkop):
+            //   datum | van | tot | modus | titel | tekst | pdf
+            const MELDINGEN_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSKgadxr5fzCIL__RMD06Ko2yH_nTayKxfqOTrMAyEm6snKpjQq0OC3dodjXlT2xBqqq2ONS_dp2nE7/pub?gid=308528338&single=true&output=csv';
 
             const DAY_NAMES = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
 
@@ -526,32 +525,37 @@
             let meldingenCache = null;
 
             function fetchMeldingen() {
-                if (MELDINGEN_GID === null) return Promise.resolve([]);
                 if (meldingenCache) return Promise.resolve(meldingenCache);
                 const bust = '&cb=' + Date.now();
-                return fetch(`${CSV_BASE}?gid=${MELDINGEN_GID}&single=true&output=csv${bust}`)
+                return fetch(MELDINGEN_URL + bust)
                     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
                     .then(csvText => {
                         const rows = parseCSV(csvText);
+                        if (rows.length === 0) return [];
+                        // kolommen herkennen op kolomkop (volgorde onbelangrijk)
+                        const header = rows[0].map(h => (h || '').trim().toLowerCase());
+                        const col = (name) => header.indexOf(name);
+                        const cDatum = col('datum'), cVan = col('van'), cTot = col('tot'),
+                              cModus = col('modus'), cTitel = col('titel'), cTekst = col('tekst'), cPdf = col('pdf');
+                        if (cDatum < 0 || cVan < 0 || cTot < 0) {
+                            console.warn('Meldingen: kolommen datum/van/tot niet gevonden', header);
+                            return [];
+                        }
+                        const get = (row, i) => (i >= 0 && row[i] !== undefined) ? String(row[i]).trim() : '';
                         const meldingen = [];
-                        rows.forEach((row, idx) => {
-                            const datum = (row[0] || '').trim();
-                            const van = (row[1] || '').trim();
-                            const tot = (row[2] || '').trim();
-                            const modus = (row[3] || '').trim().toLowerCase();
-                            const titel = (row[4] || '').trim();
-                            const tekst = (row[5] || '').trim();
-                            const pdf = (row[6] || '').trim();
-                            // header en lege rijen overslaan
-                            if (idx === 0 && datum.toLowerCase() === 'datum') return;
-                            if (!datum && !van && !tot && !titel && !tekst && !pdf) return;
-                            if (!datum || van === '' || tot === '' || (!titel && !tekst && !pdf)) return;
+                        for (let i = 1; i < rows.length; i++) {
+                            const row = rows[i];
+                            const datum = get(row, cDatum), van = get(row, cVan), tot = get(row, cTot);
+                            const titel = get(row, cTitel), tekst = get(row, cTekst), pdf = get(row, cPdf);
+                            const modus = get(row, cModus).toLowerCase();
+                            if (!datum && !van && !tot && !titel && !tekst && !pdf) continue; // lege rij
+                            if (!datum || !van || !tot || (!titel && !tekst && !pdf)) continue; // onvolledig
                             meldingen.push({
                                 datum, van, tot,
-                                modus: modus === 'volledig' || modus === 'full' ? 'full' : 'split',
+                                modus: (modus === 'volledig' || modus === 'full') ? 'full' : 'split',
                                 titel, tekst, pdf: toEmbeddablePdf(pdf),
                             });
-                        });
+                        }
                         meldingenCache = meldingen;
                         return meldingen;
                     })
