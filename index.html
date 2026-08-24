@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vervangingsrooster</title>
-    <!-- PDF.js legacy build: rendert PDF's zelf op canvas.
+    <!-- PDF.js lokaal gehost (legacy build): rendert PDF's zelf op canvas.
          Nodig voor signage-WebViews (Pico XI) waar de Google Drive
-         preview-viewer (zware JS-app) crasht en een zwart vlak achterlaat. -->
-    <script src="https://unpkg.com/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
+         preview-viewer (zware JS-app) crasht en een zwart vlak achterlaat.
+         Lokaal = geen CDN-afhankelijkheid op het signage-netwerk. -->
+    <script src="lib/pdf.min.js"></script>
     <script>
         if (window.pdfjsLib) {
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
         }
     </script>
     <style>
@@ -537,17 +538,37 @@
                 return false;
             }
 
-            // Drive-link → directe download-URL (CORS-vriendelijk, voor PDF.js)
-            // De /preview-viewer van Google crasht op signage-WebViews (Pico XI)
-            // → we renderen zelf met PDF.js, dus hebben we de ruwe bytes nodig.
-            function toEmbeddablePdf(url) {
-                if (!url) return null;
-                const u = String(url).trim();
+            // Drive-link omzetten:
+            //  - downloadUrl → directe bytes voor PDF.js (CORS-vriendelijk)
+            //  - previewUrl  → Google-viewer voor iframe-fallback (werkt op desktops)
+            function drivePdfUrls(rawUrl) {
+                if (!rawUrl) return { downloadUrl: null, previewUrl: null };
+                const u = String(rawUrl).trim();
+                let id = null;
                 let m = u.match(/drive\.google\.com\/file\/d\/([^/?#]+)/);
-                if (m) return 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download';
-                m = u.match(/[?&]id=([^&#]+)/);
-                if (m && u.includes('drive.google.com')) return 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download';
-                return u; // directe PDF-link (moet zelf CORS toestaan)
+                if (m) id = m[1];
+                if (!id) {
+                    // ook eigen download-URL's (drive.usercontent.google.com) herkennen
+                    m = u.match(/[?&]id=([^&#]+)/);
+                    if (m && u.includes('drive.google.com')) id = m[1];
+                    if (!id) {
+                        m = u.match(/drive\.usercontent\.google\.com\/download\?id=([^&#]+)/);
+                        if (m) id = m[1];
+                    }
+                }
+                if (id) {
+                    return {
+                        downloadUrl: 'https://drive.usercontent.google.com/download?id=' + id + '&export=download',
+                        previewUrl: 'https://drive.google.com/file/d/' + id + '/preview',
+                    };
+                }
+                // directe PDF-link elders: beide hetzelfde
+                return { downloadUrl: u, previewUrl: u };
+            }
+
+            function toEmbeddablePdf(url) {
+                const urls = drivePdfUrls(url);
+                return urls.downloadUrl;
             }
 
             let meldingenCache = null;
@@ -606,21 +627,30 @@
             }
 
             // ── PDF-rendering ──
-            // Render met PDF.js op canvas (werkt op signage-WebViews),
-            // fallback naar iframe als PDF.js niet beschikbaar/laadbaar is.
+            // Strategie: PDF.js op canvas (signage-safe) met de directe download-URL.
+            // Lukt dat niet → iframe met de Google /preview-viewer (desktop-safe).
             function renderPdf(container, url, titel) {
-                if (!window.pdfjsLib) {
+                const urls = drivePdfUrls(url);
+                const downloadUrl = urls.downloadUrl;
+                const previewUrl = urls.previewUrl;
+
+                const showIframeFallback = () => {
+                    container.innerHTML = '';
                     const fb = document.createElement('iframe');
-                    fb.src = url;
+                    fb.src = previewUrl;
                     fb.title = titel || 'Melding';
                     container.appendChild(fb);
+                };
+
+                if (!window.pdfjsLib || !downloadUrl) {
+                    showIframeFallback();
                     return;
                 }
                 const canvas = document.createElement('canvas');
                 canvas.className = 'pdf-canvas';
                 container.appendChild(canvas);
 
-                pdfjsLib.getDocument({ url: url, withCredentials: false }).promise.then(pdf => {
+                pdfjsLib.getDocument({ url: downloadUrl, withCredentials: false }).promise.then(pdf => {
                     let pageNum = 1;
                     const renderPage = () => {
                         pdf.getPage(pageNum).then(page => {
@@ -648,11 +678,7 @@
                     }
                 }).catch(err => {
                     console.warn('PDF.js kon de PDF niet laden:', err.message);
-                    canvas.remove();
-                    const fb = document.createElement('iframe');
-                    fb.src = url;
-                    fb.title = titel || 'Melding';
-                    container.appendChild(fb);
+                    showIframeFallback();
                 });
             }
 
