@@ -25,8 +25,10 @@
             --table-header-bg: #16213e;
             --table-header-text: #ffffff;
             --table-row-alt: #f5f6fa;
-            --table-row-hover: #eef0f5;
             --time-col-bg: #e8eaf0;
+            --melding-bg: #fff8f0;
+            --melding-border: #f0c48a;
+            --melding-title: #b3541e;
 
             --header-height: 80px;
             --logo-size: 1.8rem;
@@ -49,8 +51,10 @@
                 --table-header-bg: #0d0d1a;
                 --table-header-text: #e0e0e0;
                 --table-row-alt: #161624;
-                --table-row-hover: #1c1c2e;
                 --time-col-bg: #11111e;
+                --melding-bg: #1a1408;
+                --melding-border: #6b4e1e;
+                --melding-title: #ffb066;
             }
         }
 
@@ -114,15 +118,35 @@
             font-variant-numeric: tabular-nums;
         }
 
-        /* ── Schedule table ── */
+        /* ── Main: roster + melding panes ── */
         main {
             flex: 1;
             overflow: hidden;
-            padding: 0;
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
         }
 
+        #rosterPane {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        #meldingPane {
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            border-left: 3px solid var(--melding-border);
+            background: var(--melding-bg);
+        }
+
+        body.mode-split #meldingPane { display: flex; width: 40%; flex: none; }
+        body.mode-full  #meldingPane { display: flex; width: 100%; flex: 1; border-left: none; }
+        body.mode-full  #rosterPane { display: none; }
+
+        /* ── Schedule table ── */
         .schedule-table {
             flex: 1;
             height: 100%;
@@ -134,9 +158,9 @@
         .schedule-table thead th {
             background: var(--table-header-bg);
             color: var(--table-header-text);
-            font-size: clamp(1rem, 1.8vw, 1.5rem);
+            font-size: clamp(0.9rem, 1.4vw, 1.4rem);
             font-weight: 600;
-            padding: 16px 12px;
+            padding: 12px 10px;
             text-align: left;
             border-bottom: 2px solid var(--accent);
             position: sticky;
@@ -144,10 +168,10 @@
         }
 
         .schedule-table tbody td {
-            font-size: clamp(0.9rem, 1.5vw, 1.4rem);
-            padding: 14px 12px;
+            font-size: clamp(0.8rem, 1.2vw, 1.3rem);
+            padding: 12px 10px;
             border-bottom: 1px solid var(--border);
-            line-height: 1.5;
+            line-height: 1.45;
             vertical-align: middle;
             word-wrap: break-word;
             white-space: pre-line;
@@ -157,7 +181,6 @@
             background: var(--table-row-alt);
         }
 
-        /* Column B (time slot) — emphasised */
         .schedule-table tbody td.time-col {
             background: var(--time-col-bg);
             font-weight: 700;
@@ -166,29 +189,64 @@
             text-align: center;
         }
 
-        /* First column slightly narrower */
         .schedule-table th:first-child,
         .schedule-table td:first-child {
             width: 18%;
         }
 
-        /* Empty cells get a subtle dash */
         .schedule-table tbody td:empty::after {
             content: '—';
             opacity: 0.3;
-        }
-
-        /* ── Past rows fade out ── */
-        .schedule-table tbody tr.past {
-            opacity: 0;
-            transform: translateY(-6px);
         }
 
         .schedule-table tbody tr {
             transition: opacity 0.6s ease, transform 0.6s ease;
         }
 
-        /* ── Weekend / no-schedule ── */
+        .schedule-table tbody tr.past {
+            opacity: 0;
+            transform: translateY(-6px);
+        }
+
+        /* ── Melding panel ── */
+        .melding-head {
+            padding: 18px 28px 14px;
+            border-bottom: 2px solid var(--melding-border);
+        }
+
+        .melding-head h2 {
+            font-size: clamp(1.3rem, 2.2vw, 2rem);
+            font-weight: 700;
+            color: var(--melding-title);
+            letter-spacing: -0.01em;
+        }
+
+        .melding-body {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+        }
+
+        .melding-body .tekst {
+            padding: 18px 28px;
+            font-size: clamp(1.05rem, 1.7vw, 1.6rem);
+            line-height: 1.55;
+            white-space: pre-line;
+        }
+
+        .melding-body iframe {
+            flex: 1;
+            width: 100%;
+            border: none;
+            background: #fff;
+        }
+
+        body.mode-split .melding-body iframe { min-height: 0; }
+        body.mode-full  .melding-body iframe { flex: 1; }
+
+        /* ── Generic states (weekend / end of day / error) ── */
         .no-schedule {
             display: flex;
             flex-direction: column;
@@ -219,7 +277,6 @@
             line-height: 1.5;
         }
 
-        /* ── Loading ── */
         .loading {
             display: flex;
             align-items: center;
@@ -240,7 +297,6 @@
             to { transform: rotate(360deg); }
         }
 
-        /* ── Error ── */
         .error-state {
             display: flex;
             flex-direction: column;
@@ -264,23 +320,15 @@
                 --badge-size: 0.8rem;
                 --clock-size: 0.75rem;
             }
-            header {
-                padding: 0 16px;
-            }
-            .header-left {
-                gap: 12px;
-            }
-            .day-badge {
-                padding: 4px 14px;
-            }
-            .schedule-table thead th {
-                font-size: 0.85rem;
-                padding: 8px 6px;
-            }
-            .schedule-table tbody td {
-                font-size: 0.75rem;
-                padding: 8px 6px;
-            }
+            header { padding: 0 16px; }
+            .header-left { gap: 12px; }
+            .day-badge { padding: 4px 14px; }
+            .schedule-table thead th { font-size: 0.7rem; padding: 6px 4px; }
+            .schedule-table tbody td { font-size: 0.65rem; padding: 6px 4px; }
+            main { flex-direction: column; }
+            body.mode-split #meldingPane { width: 100%; border-left: none; border-top: 3px solid var(--melding-border); height: 45%; flex: none; }
+            .melding-head { padding: 10px 14px 8px; }
+            .melding-body .tekst { padding: 10px 14px; font-size: 0.9rem; }
         }
     </style>
 </head>
@@ -295,15 +343,19 @@
     </header>
 
     <main id="main">
-        <div class="loading"><div class="spinner"></div></div>
+        <div id="rosterPane">
+            <div class="loading"><div class="spinner"></div></div>
+        </div>
+        <aside id="meldingPane" aria-live="polite"></aside>
     </main>
 
     <script>
         (function () {
-            // ── Config ──
+            // ══════════════════════════════════════════════════════════
+            //  CONFIG
+            // ══════════════════════════════════════════════════════════
             const CSV_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR5N6LWtAsfe7-2Wl1YCGnv6PaPwlxwTcEtLWGQETjLrnjpPvr5FsDanXo_QXAc74uanJLhb9fZ4g_w/pub';
 
-            // gid + cell range per weekday
             const SCHEDULES = {
                 1: { gid: '702076612',  label: 'Maandag',   range: { startRow: 4, endRow: 12, startCol: 1, endCol: 6 } },
                 2: { gid: '454824552',  label: 'Dinsdag',   range: { startRow: 4, endRow: 12, startCol: 1, endCol: 6 } },
@@ -312,9 +364,18 @@
                 5: { gid: '4978925',    label: 'Vrijdag',   range: { startRow: 4, endRow: 12, startCol: 1, endCol: 6 } },
             };
 
+            // ── MELDINGEN ──
+            // gid van het tabblad "Meldingen" in het Google Sheet.
+            // Nog niet ingesteld → meldingen-functionaliteit staat uit.
+            // Zo vind je de gid: open het gepubliceerde tabblad, kijk naar
+            // ?gid=XXXX in de URL, en vul die hier in.
+            const MELDINGEN_GID = null;
+
             const DAY_NAMES = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
 
             const main = document.getElementById('main');
+            const rosterPane = document.getElementById('rosterPane');
+            const meldingPane = document.getElementById('meldingPane');
             const dayBadge = document.getElementById('dayBadge');
             const clockEl = document.getElementById('clock');
 
@@ -326,7 +387,9 @@
             updateClock();
             setInterval(updateClock, 10000);
 
-            // ── CSV parser (handles quoted fields, embedded newlines) ──
+            // ══════════════════════════════════════════════════════════
+            //  CSV PARSING
+            // ══════════════════════════════════════════════════════════
             function parseCSV(text) {
                 const rows = [];
                 let row = [];
@@ -338,32 +401,18 @@
 
                     if (inQuotes) {
                         if (ch === '"') {
-                            if (text[i + 1] === '"') {
-                                cell += '"';
-                                i++;
-                            } else {
-                                inQuotes = false;
-                            }
+                            if (text[i + 1] === '"') { cell += '"'; i++; }
+                            else { inQuotes = false; }
                         } else {
                             cell += ch;
                         }
                     } else {
-                        if (ch === '"') {
-                            inQuotes = true;
-                        } else if (ch === ',') {
-                            row.push(cell);
-                            cell = '';
-                        } else if (ch === '\n') {
-                            row.push(cell);
-                            rows.push(row);
-                            row = [];
-                            cell = '';
-                        } else if (ch !== '\r') {
-                            cell += ch;
-                        }
+                        if (ch === '"') { inQuotes = true; }
+                        else if (ch === ',') { row.push(cell); cell = ''; }
+                        else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+                        else if (ch !== '\r') { cell += ch; }
                     }
                 }
-                // Last cell/row
                 if (cell.length > 0 || row.length > 0) {
                     row.push(cell);
                     rows.push(row);
@@ -371,18 +420,15 @@
                 return rows;
             }
 
-            // ── Extract cells from parsed CSV ──
             function extractRange(csvData, range) {
                 const { startRow, endRow, startCol, endCol } = range;
                 const result = [];
-                // CSV rows are 0-indexed, spreadsheet rows are 1-indexed
                 for (let r = startRow - 1; r <= endRow - 1 && r < csvData.length; r++) {
                     const csvRow = csvData[r] || [];
                     const extracted = [];
                     for (let c = startCol; c <= endCol; c++) {
                         extracted.push((csvRow[c] || '').trim());
                     }
-                    // Skip fully empty rows
                     if (extracted.some(v => v.length > 0)) {
                         result.push(extracted);
                     }
@@ -390,23 +436,23 @@
                 return result;
             }
 
-            // ── Detect if row is a header row ──
             function looksLikeHeader(cells) {
                 const joined = cells.join(' ').toUpperCase();
                 return joined.includes('LESUUR') || joined.includes('AFWEZIGE') || joined.includes('STUDIE');
             }
 
-            // ── Render table ──
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
             function renderTable(data) {
                 let html = '<table class="schedule-table">';
-
                 data.forEach((row, rowIdx) => {
-                    // If row looks like header, render as thead
                     if (rowIdx === 0 && looksLikeHeader(row)) {
                         html += '<thead><tr>';
-                        row.forEach(cell => {
-                            html += `<th>${escapeHtml(cell)}</th>`;
-                        });
+                        row.forEach(cell => { html += `<th>${escapeHtml(cell)}</th>`; });
                         html += '</tr></thead><tbody>';
                     } else {
                         html += '<tr>';
@@ -417,36 +463,163 @@
                         html += '</tr>';
                     }
                 });
-
-                // Close tbody if we had a header, otherwise wrap body rows
-                if (data.length > 0 && looksLikeHeader(data[0])) {
-                    html += '</tbody>';
-                }
-
+                if (data.length > 0 && looksLikeHeader(data[0])) { html += '</tbody>'; }
                 html += '</table>';
                 return html;
             }
 
-            function escapeHtml(text) {
-                const div = document.createElement('div');
-                div.textContent = text;
-                return div.innerHTML;
+            // ══════════════════════════════════════════════════════════
+            //  MELDINGEN (uit het tabblad "Meldingen")
+            //
+            //  Kolommen:  datum | van | tot | modus | titel | tekst | pdf-url
+            //    datum :  24/08/2026  of  vrijdag  of  *  (elke dag)
+            //    van   :  10.00u   of   10:00
+            //    tot   :  12.00u   of   12:00
+            //    modus :  split  (rooster + melding)  of  volledig  (alleen melding)
+            //    titel :  koptekst
+            //    tekst :  bericht (mag leeg als er een pdf is)
+            //    pdf   :  publieke Drive-link of directe PDF-URL (mag leeg)
+            // ══════════════════════════════════════════════════════════
+
+            // "10.00u" / "10:00" / "10u00" → minuten sinds middernacht
+            function parseTimeValue(text) {
+                if (!text) return null;
+                const m = String(text).match(/(\d{1,2})\s*[.:u]\s*(\d{0,2})/);
+                if (!m) return null;
+                const h = parseInt(m[1], 10);
+                const min = m[2] ? parseInt(m[2], 10) : 0;
+                if (h > 23 || min > 59) return null;
+                return h * 60 + min;
             }
 
-            // ── Day detection ──
-            const today = new Date();
-            const dayIndex = today.getDay();
-            const dayName = DAY_NAMES[dayIndex];
-            const schedule = SCHEDULES[dayIndex];
+            // datum-matcher: exacte datum, weekdag of "*"
+            function dateMatches(datumStr, now) {
+                const s = String(datumStr || '').trim().toLowerCase();
+                if (!s || s === '*' || s === 'altijd' || s === 'elke dag') return true;
 
-            // ── Parse "08.25u-09.15u" → end minutes ──
+                // dd/mm/yyyy
+                const dm = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                if (dm) {
+                    return now.getDate() === +dm[1] && (now.getMonth() + 1) === +dm[2] && now.getFullYear() === +dm[3];
+                }
+
+                // weekdag: eerste 2 letters (ma/di/wo/do/vr/za/zo)
+                const wd = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
+                const two = s.slice(0, 2);
+                if (wd.includes(two)) {
+                    return wd[now.getDay()] === two;
+                }
+                return false;
+            }
+
+            // Drive-link → insluitbare /preview-URL
+            function toEmbeddablePdf(url) {
+                if (!url) return null;
+                const u = String(url).trim();
+                let m = u.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+                if (m) return 'https://drive.google.com/file/d/' + m[1] + '/preview';
+                m = u.match(/[?&]id=([^&]+)/);
+                if (m && u.includes('drive.google.com')) return 'https://drive.google.com/file/d/' + m[1] + '/preview';
+                return u; // directe PDF-link of al een preview-URL
+            }
+
+            let meldingenCache = null;
+
+            function fetchMeldingen() {
+                if (MELDINGEN_GID === null) return Promise.resolve([]);
+                if (meldingenCache) return Promise.resolve(meldingenCache);
+                const bust = '&cb=' + Date.now();
+                return fetch(`${CSV_BASE}?gid=${MELDINGEN_GID}&single=true&output=csv${bust}`)
+                    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+                    .then(csvText => {
+                        const rows = parseCSV(csvText);
+                        const meldingen = [];
+                        rows.forEach((row, idx) => {
+                            const datum = (row[0] || '').trim();
+                            const van = (row[1] || '').trim();
+                            const tot = (row[2] || '').trim();
+                            const modus = (row[3] || '').trim().toLowerCase();
+                            const titel = (row[4] || '').trim();
+                            const tekst = (row[5] || '').trim();
+                            const pdf = (row[6] || '').trim();
+                            // header en lege rijen overslaan
+                            if (idx === 0 && datum.toLowerCase() === 'datum') return;
+                            if (!datum && !van && !tot && !titel && !tekst && !pdf) return;
+                            if (!datum || van === '' || tot === '' || (!titel && !tekst && !pdf)) return;
+                            meldingen.push({
+                                datum, van, tot,
+                                modus: modus === 'volledig' || modus === 'full' ? 'full' : 'split',
+                                titel, tekst, pdf: toEmbeddablePdf(pdf),
+                            });
+                        });
+                        meldingenCache = meldingen;
+                        return meldingen;
+                    })
+                    .catch(err => {
+                        console.warn('Meldingen niet geladen:', err.message);
+                        return [];
+                    });
+            }
+
+            function findActiveMelding(meldingen, now) {
+                const nowMin = now.getHours() * 60 + now.getMinutes();
+                for (const m of meldingen) {
+                    if (!dateMatches(m.datum, now)) continue;
+                    const van = parseTimeValue(m.van);
+                    const tot = parseTimeValue(m.tot);
+                    if (van === null || tot === null) continue;
+                    if (nowMin >= van && nowMin < tot) return m;
+                }
+                return null;
+            }
+
+            let lastMeldingKey = null;
+
+            function renderMelding(m) {
+                let html = '';
+                if (m.titel) {
+                    html += `<div class="melding-head"><h2>${escapeHtml(m.titel)}</h2></div>`;
+                }
+                html += '<div class="melding-body">';
+                if (m.pdf) {
+                    if (m.tekst) html += `<div class="tekst">${escapeHtml(m.tekst)}</div>`;
+                    html += `<iframe src="${escapeHtml(m.pdf)}" title="${escapeHtml(m.titel || 'Melding')}"></iframe>`;
+                } else if (m.tekst) {
+                    html += `<div class="tekst" style="flex:1; display:flex; align-items:center;">${escapeHtml(m.tekst)}</div>`;
+                }
+                html += '</div>';
+                meldingPane.innerHTML = html;
+            }
+
+            function applyMelding() {
+                return fetchMeldingen().then(meldingen => {
+                    const now = new Date();
+                    const active = findActiveMelding(meldingen, now);
+                    const key = active ? active.datum + '|' + active.van + '|' + active.titel : null;
+
+                    if (key === lastMeldingKey) return; // niets veranderd
+
+                    lastMeldingKey = key;
+                    if (!active) {
+                        document.body.classList.remove('mode-split', 'mode-full');
+                        meldingPane.innerHTML = '';
+                        return;
+                    }
+                    renderMelding(active);
+                    document.body.classList.toggle('mode-full', active.modus === 'full');
+                    document.body.classList.toggle('mode-split', active.modus !== 'full');
+                });
+            }
+
+            // ══════════════════════════════════════════════════════════
+            //  ROSTER
+            // ══════════════════════════════════════════════════════════
             function parseTimeSlot(text) {
                 const m = text.match(/(\d{1,2})\.(\d{2})u\s*-\s*(\d{1,2})\.(\d{2})u/);
                 if (!m) return null;
                 return { start: parseInt(m[1]) * 60 + parseInt(m[2]), end: parseInt(m[3]) * 60 + parseInt(m[4]) };
             }
 
-            // ── Hide rows whose lesson has ended ──
             function updatePastRows(initial) {
                 const now = new Date();
                 const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -469,9 +642,8 @@
                     if (!tr.classList.contains('past')) visible++;
                 });
 
-                // All lessons finished → friendly end-of-day message
                 if (visible === 0 && rows.length > 0) {
-                    main.innerHTML = `
+                    rosterPane.innerHTML = `
                         <div class="no-schedule">
                             <div class="icon">🏁</div>
                             <h2>School dag zit erop</h2>
@@ -481,57 +653,67 @@
                 }
             }
 
+            // ── Day detection ──
+            const today = new Date();
+            const dayIndex = today.getDay();
+            const dayName = DAY_NAMES[dayIndex];
+            const schedule = SCHEDULES[dayIndex];
+
             dayBadge.textContent = dayName;
 
             if (!schedule) {
-                main.innerHTML = `
+                rosterPane.innerHTML = `
                     <div class="no-schedule">
                         <div class="icon">🏖️</div>
                         <h2>Geen rooster vandaag</h2>
                         <p>Het is ${dayName.toLowerCase()}. Het vervangingsrooster is er weer op maandag.</p>
                     </div>
                 `;
-                return;
-            }
+            } else {
+                const csvUrl = `${CSV_BASE}?gid=${schedule.gid}&single=true&output=csv`;
 
-            // ── Fetch CSV and render ──
-            const csvUrl = `${CSV_BASE}?gid=${schedule.gid}&single=true&output=csv`;
+                fetch(csvUrl)
+                    .then(res => {
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        return res.text();
+                    })
+                    .then(csvText => {
+                        const csvData = parseCSV(csvText);
+                        const cellData = extractRange(csvData, schedule.range);
 
-            fetch(csvUrl)
-                .then(res => {
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
-                    return res.text();
-                })
-                .then(csvText => {
-                    const csvData = parseCSV(csvText);
-                    const cellData = extractRange(csvData, schedule.range);
+                        if (cellData.length === 0) {
+                            rosterPane.innerHTML = `
+                                <div class="no-schedule">
+                                    <div class="icon">📭</div>
+                                    <h2>Geen vervangingen vandaag</h2>
+                                    <p>Het rooster is leeg voor ${schedule.label.toLowerCase()}.</p>
+                                </div>
+                            `;
+                            return;
+                        }
 
-                    if (cellData.length === 0) {
-                        main.innerHTML = `
-                            <div class="no-schedule">
-                                <div class="icon">📭</div>
-                                <h2>Geen vervangingen vandaag</h2>
-                                <p>Het rooster is leeg voor ${schedule.label.toLowerCase()}.</p>
+                        rosterPane.innerHTML = renderTable(cellData);
+                        dayBadge.textContent = schedule.label;
+                        updatePastRows(true);
+                    })
+                    .catch(err => {
+                        console.error('Fetch error:', err);
+                        rosterPane.innerHTML = `
+                            <div class="error-state">
+                                <div class="icon">⚠️</div>
+                                <h2>Rooster kan niet geladen worden</h2>
+                                <p style="font-size:1.2rem;color:var(--text-secondary);">${escapeHtml(err.message)}</p>
                             </div>
                         `;
-                        return;
-                    }
+                    });
+            }
 
-                    main.innerHTML = renderTable(cellData);
-                    dayBadge.textContent = schedule.label;
-                    updatePastRows(true);
-                    setInterval(function () { updatePastRows(false); }, 30000);
-                })
-                .catch(err => {
-                    console.error('Fetch error:', err);
-                    main.innerHTML = `
-                        <div class="error-state">
-                            <div class="icon">⚠️</div>
-                            <h2>Rooster kan niet geladen worden</h2>
-                            <p style="font-size:1.2rem;color:var(--text-secondary);">${escapeHtml(err.message)}</p>
-                        </div>
-                    `;
-                });
+            // ── Elke 30 s: verdwenen lesuren + actieve melding ──
+            setInterval(function () {
+                updatePastRows(false);
+                applyMelding();
+            }, 30000);
+            applyMelding();
 
             // ── Auto-refresh every 5 minutes ──
             setInterval(function () {
