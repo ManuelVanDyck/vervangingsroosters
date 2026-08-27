@@ -532,9 +532,13 @@
                 const s = String(str || '').trim().toLowerCase();
                 if (!s || s === '*' || s === 'altijd' || s === 'elke dag') return { type: 'any' };
 
-                // dd/mm/yyyy
-                const dm = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-                if (dm) return { type: 'date', d: +dm[1], m: +dm[2], y: +dm[3] };
+                // dd/mm/yyyy, dd/mm/yy of dd/mm (jaar weglaten kan — Sheets toont vaak zonder)
+                const dm = s.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/);
+                if (dm) {
+                    let y = dm[3] ? +dm[3] : null;
+                    if (y !== null && y < 100) y += 2000;
+                    return { type: 'date', d: +dm[1], m: +dm[2], y };
+                }
 
                 // weekdag: eerste 2 letters (ma/di/wo/do/vr/za/zo)
                 const wd = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
@@ -546,7 +550,8 @@
             function matchSingleDate(spec, now) {
                 if (spec.type === 'any') return true;
                 if (spec.type === 'weekday') return now.getDay() === spec.idx;
-                return now.getDate() === spec.d && (now.getMonth() + 1) === spec.m && now.getFullYear() === spec.y;
+                const y = spec.y === null ? now.getFullYear() : spec.y;
+                return now.getDate() === spec.d && (now.getMonth() + 1) === spec.m && now.getFullYear() === y;
             }
 
             // datum-bereik: vandaag moet tussen startdatum en einddatum liggen (inclusief).
@@ -565,7 +570,14 @@
                 if (hasStart && hasEnd) {
                     if (start.type === 'date' && copy.type === 'date') {
                         const t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                        return t >= new Date(start.y, start.m - 1, start.d) && t <= new Date(copy.y, copy.m - 1, copy.d);
+                        // ontbrekend jaar invullen: start = dit jaar; eind = jaar van start,
+                        // en als eind vóór start valt → jaar later (jaar-grens-overgang)
+                        const sy = start.y === null ? now.getFullYear() : start.y;
+                        const ey = copy.y === null ? sy : copy.y;
+                        const sD = new Date(sy, start.m - 1, start.d);
+                        let eD = new Date(ey, copy.m - 1, copy.d);
+                        if (eD < sD && copy.y === null) eD = new Date(sy + 1, copy.m - 1, copy.d);
+                        return t >= sD && t <= eD;
                     }
                     if (start.type === 'weekday' || copy.type === 'weekday') {
                         const d = now.getDay();
