@@ -402,7 +402,7 @@
             // ── MELDINGEN ──
             // Publieke CSV van het tabblad "Meldingen".
             // Kolommen (volgorde onbelangrijk, herkend op kolomkop):
-            //   datum | van | tot | modus | titel | tekst | pdf
+            //   startdatum | einddatum | startuur | einduur | modus | titel | tekst | pdf
             const MELDINGEN_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSKgadxr5fzCIL__RMD06Ko2yH_nTayKxfqOTrMAyEm6snKpjQq0OC3dodjXlT2xBqqq2ONS_dp2nE7/pub?gid=308528338&single=true&output=csv';
 
             const DAY_NAMES = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
@@ -505,10 +505,11 @@
             // ══════════════════════════════════════════════════════════
             //  MELDINGEN (uit het tabblad "Meldingen")
             //
-            //  Kolommen:  datum | van | tot | modus | titel | tekst | pdf-url
-            //    datum :  24/08/2026  of  vrijdag  of  *  (elke dag)
-            //    van   :  10.00u   of   10:00
-            //    tot   :  12.00u   of   12:00
+            //  Kolommen:  startdatum | einddatum | startuur | einduur | modus | titel | tekst | pdf
+            //    startdatum : 24/08/2026  of  ma/di/wo/do/vr/za/zo  of  *  (elke dag)
+            //    einddatum  : idem — melding geldt t.e.m. deze datum (leeg of * = alleen startdatum)
+            //    startuur   :  10.00u   of   10:00
+            //    einduur    :  12.00u   of   12:00
             //    modus :  split  (rooster + melding)  of  volledig  (alleen melding)
             //    titel :  koptekst
             //    tekst :  bericht (mag leeg als er een pdf is)
@@ -526,24 +527,56 @@
                 return h * 60 + min;
             }
 
-            // datum-matcher: exacte datum, weekdag of "*"
-            function dateMatches(datumStr, now) {
-                const s = String(datumStr || '').trim().toLowerCase();
-                if (!s || s === '*' || s === 'altijd' || s === 'elke dag') return true;
+            // datum-parser: '*' (elke dag), dd/mm/yyyy of weekdag (ma/di/wo/do/vr/za/zo)
+            function parseDateSpec(str) {
+                const s = String(str || '').trim().toLowerCase();
+                if (!s || s === '*' || s === 'altijd' || s === 'elke dag') return { type: 'any' };
 
                 // dd/mm/yyyy
                 const dm = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-                if (dm) {
-                    return now.getDate() === +dm[1] && (now.getMonth() + 1) === +dm[2] && now.getFullYear() === +dm[3];
-                }
+                if (dm) return { type: 'date', d: +dm[1], m: +dm[2], y: +dm[3] };
 
                 // weekdag: eerste 2 letters (ma/di/wo/do/vr/za/zo)
                 const wd = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
                 const two = s.slice(0, 2);
-                if (wd.includes(two)) {
-                    return wd[now.getDay()] === two;
+                if (wd.includes(two)) return { type: 'weekday', idx: wd.indexOf(two) };
+                return null; // onherkenbaar
+            }
+
+            function matchSingleDate(spec, now) {
+                if (spec.type === 'any') return true;
+                if (spec.type === 'weekday') return now.getDay() === spec.idx;
+                return now.getDate() === spec.d && (now.getMonth() + 1) === spec.m && now.getFullYear() === spec.y;
+            }
+
+            // datum-bereik: vandaag moet tussen startdatum en einddatum liggen (inclusief).
+            //  - beide leeg/'*'  → elke dag
+            //  - einddatum leeg  → alleen op de startdatum
+            //  - weekdag-bereik (bv. vr t/m ma) loopt circulair over het weekend
+            function dateInRange(startStr, endStr, now) {
+                const start = parseDateSpec(startStr);
+                const copy = parseDateSpec(endStr);
+                if (!start && !copy) return false;
+
+                const hasStart = start && start.type !== 'any';
+                const hasEnd = copy && copy.type !== 'any';
+                if (!hasStart && !hasEnd) return true;
+
+                if (hasStart && hasEnd) {
+                    if (start.type === 'date' && copy.type === 'date') {
+                        const t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        return t >= new Date(start.y, start.m - 1, start.d) && t <= new Date(copy.y, copy.m - 1, copy.d);
+                    }
+                    if (start.type === 'weekday' || copy.type === 'weekday') {
+                        const d = now.getDay();
+                        return start.idx <= copy.idx
+                            ? (d >= start.idx && d <= copy.idx)
+                            : (d >= start.idx || d <= copy.idx);
+                    }
+                    // gemengd (datum + weekdag): beide los moeten kloppen
+                    return matchSingleDate(start, now) && matchSingleDate(copy, now);
                 }
-                return false;
+                return matchSingleDate(hasStart ? start : copy, now);
             }
 
             // Drive-link omzetten:
@@ -587,24 +620,26 @@
                         if (rows.length === 0) return [];
                         // kolommen herkennen op kolomkop (volgorde onbelangrijk)
                         const header = rows[0].map(h => (h || '').trim().toLowerCase());
-                        const col = (name) => header.indexOf(name);
-                        const cDatum = col('datum'), cVan = col('van'), cTot = col('tot'),
+                        const col = (...names) => { for (const n of names) { const i = header.indexOf(n); if (i >= 0) return i; } return -1; };
+                        const cStart = col('startdatum', 'datum'), cEind = col('einddatum'),
+                              cStartUur = col('startuur', 'van'), cEindUur = col('einduur', 'tot'),
                               cModus = col('modus'), cTitel = col('titel'), cTekst = col('tekst'), cPdf = col('pdf');
-                        if (cDatum < 0 || cVan < 0 || cTot < 0) {
-                            console.warn('Meldingen: kolommen datum/van/tot niet gevonden', header);
+                        if (cStart < 0 || cStartUur < 0 || cEindUur < 0) {
+                            console.warn('Meldingen: kolommen startdatum/einddatum/startuur/einduur niet gevonden', header);
                             return [];
                         }
                         const get = (row, i) => (i >= 0 && row[i] !== undefined) ? String(row[i]).trim() : '';
                         const meldingen = [];
                         for (let i = 1; i < rows.length; i++) {
                             const row = rows[i];
-                            const datum = get(row, cDatum), van = get(row, cVan), tot = get(row, cTot);
+                            const startdatum = get(row, cStart), einddatum = get(row, cEind);
+                            const startuur = get(row, cStartUur), einduur = get(row, cEindUur);
                             const titel = get(row, cTitel), tekst = get(row, cTekst), pdf = get(row, cPdf);
                             const modus = get(row, cModus).toLowerCase();
-                            if (!datum && !van && !tot && !titel && !tekst && !pdf) continue; // lege rij
-                            if (!datum || !van || !tot || (!titel && !tekst && !pdf)) continue; // onvolledig
+                            if (!startdatum && !einddatum && !startuur && !einduur && !titel && !tekst && !pdf) continue; // lege rij
+                            if (!startuur || !einduur || (!titel && !tekst && !pdf)) continue; // onvolledig
                             meldingen.push({
-                                datum, van, tot,
+                                startdatum, einddatum, startuur, einduur,
                                 modus: (modus === 'volledig' || modus === 'full') ? 'full' : 'split',
                                 titel, tekst, pdf: toEmbeddablePdf(pdf),
                             });
@@ -621,9 +656,9 @@
             function findActiveMelding(meldingen, now) {
                 const nowMin = now.getHours() * 60 + now.getMinutes();
                 for (const m of meldingen) {
-                    if (!dateMatches(m.datum, now)) continue;
-                    const van = parseTimeValue(m.van);
-                    const tot = parseTimeValue(m.tot);
+                    if (!dateInRange(m.startdatum, m.einddatum, now)) continue;
+                    const van = parseTimeValue(m.startuur);
+                    const tot = parseTimeValue(m.einduur);
                     if (van === null || tot === null) continue;
                     if (nowMin >= van && nowMin < tot) return m;
                 }
@@ -729,7 +764,7 @@
                 return fetchMeldingen().then(meldingen => {
                     const now = new Date();
                     const active = findActiveMelding(meldingen, now);
-                    const key = active ? active.datum + '|' + active.van + '|' + active.titel : null;
+                    const key = active ? active.startdatum + '|' + active.einddatum + '|' + active.startuur + '|' + active.titel : null;
 
                     if (key === lastMeldingKey) return; // niets veranderd
 
