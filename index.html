@@ -182,9 +182,14 @@
             padding: 12px 10px;
             border-bottom: 1px solid var(--border);
             line-height: 1.45;
-            vertical-align: middle;
+            vertical-align: top;
             word-wrap: break-word;
             white-space: pre-line;
+        }
+
+        /* "-----"-scheidingslijnen in cellen: laten wegvallen als inhoud */
+        .schedule-table tbody td .cell-sep {
+            opacity: 0.3;
         }
 
         .schedule-table tbody tr:nth-child(even) td {
@@ -197,6 +202,7 @@
             color: var(--text);
             white-space: nowrap;
             text-align: center;
+            vertical-align: middle; /* lesuur blijft netjes gecentreerd */
         }
 
         .schedule-table th:first-child,
@@ -481,6 +487,14 @@
                 return div.innerHTML;
             }
 
+            // "-----"-scheidingslijnen in een cel dimmen (geen echte inhoud).
+            // De regel zelf blijft staan — anders verschuiven de andere regels.
+            function formatCell(text) {
+                return escapeHtml(text).split('\n').map(line =>
+                    /^\s*-{2,}\s*$/.test(line) ? '<span class="cell-sep">' + line.trim() + '</span>' : line
+                ).join('\n');
+            }
+
             function renderTable(data) {
                 let html = '<table class="schedule-table">';
                 data.forEach((row, rowIdx) => {
@@ -492,7 +506,7 @@
                         html += '<tr>';
                         row.forEach((cell, colIdx) => {
                             const cls = colIdx === 0 ? ' class="time-col"' : '';
-                            html += `<td${cls}>${escapeHtml(cell)}</td>`;
+                            html += `<td${cls}>${formatCell(cell)}</td>`;
                         });
                         html += '</tr>';
                     }
