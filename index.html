@@ -372,6 +372,28 @@
             .melding-body .tekst { padding: 10px 14px; font-size: 0.9rem; }
         }
     </style>
+    <script>
+        // ── Schaal-correctie voor signage-spelers ──
+        // De site is ontworpen op 1920px breedte. Sommige spelers (Chromebox in 4K,
+        // hoge DPI) rapporteren een veel grotere CSS-viewport terwijl het fysieke
+        // scherm gelijk blijft: alle rem/vw-clamps vallen dan op hun plafond en alles
+        // lijkt fysiek klein. Oplossing: root-font-size meeschalen met de viewport.
+        (function () {
+            var DESIGN_WIDTH = 1920;
+            var params = new URLSearchParams(location.search);
+            var zoom = parseFloat(params.get('zoom'));
+            if (!isFinite(zoom) || zoom <= 0) zoom = 1;
+            function applyScale() {
+                var w = document.documentElement.clientWidth;
+                var scale = Math.max(0.5, Math.min(3, (w / DESIGN_WIDTH) * zoom));
+                document.documentElement.style.fontSize = (16 * scale).toFixed(2) + 'px';
+            }
+            applyScale();
+            window.addEventListener('resize', applyScale);
+            // sommige signage-spelers wijzigen de viewport zonder resize-event
+            setInterval(applyScale, 2000);
+        })();
+    </script>
 </head>
 <body>
 
