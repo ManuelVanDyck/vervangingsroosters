@@ -430,7 +430,7 @@
             // ── MELDINGEN ──
             // Publieke CSV van het tabblad "Meldingen".
             // Kolommen (volgorde onbelangrijk, herkend op kolomkop):
-            //   startdatum | einddatum | startuur | einduur | modus | titel | tekst | pdf
+            //   startdatum | einddatum | startuur | einduur | modus | titel | tekst | pdf | pdf1 | pdf2 | timer
             const MELDINGEN_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSKgadxr5fzCIL__RMD06Ko2yH_nTayKxfqOTrMAyEm6snKpjQq0OC3dodjXlT2xBqqq2ONS_dp2nE7/pub?gid=308528338&single=true&output=csv';
 
             const DAY_NAMES = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
@@ -541,7 +541,7 @@
             // ══════════════════════════════════════════════════════════
             //  MELDINGEN (uit het tabblad "Meldingen")
             //
-            //  Kolommen:  startdatum | einddatum | startuur | einduur | modus | titel | tekst | pdf
+            //  Kolommen:  startdatum | einddatum | startuur | einduur | modus | titel | tekst | pdf | pdf1 | pdf2 | timer
             //    startdatum : 24/08/2026  of  ma/di/wo/do/vr/za/zo  of  *  (elke dag)
             //    einddatum  : idem — melding geldt t.e.m. deze datum (leeg of * = alleen startdatum)
             //    startuur   :  10.00u   of   10:00
@@ -550,6 +550,9 @@
             //    titel :  koptekst
             //    tekst :  bericht (mag leeg als er een pdf is)
             //    pdf   :  publieke Drive-link of directe PDF-URL (mag leeg)
+            //    pdf1  :  eerste PDF voor wissel-weergave (heeft voorrang op pdf)
+            //    pdf2  :  tweede PDF — pdf1 en pdf2 wisselen af, allebei invullen
+            //    timer :  wisselinterval in seconden (min 3, standaard 15)
             // ══════════════════════════════════════════════════════════
 
             // "10.00u" / "10:00" / "10u00" → minuten sinds middernacht
@@ -671,7 +674,8 @@
                         const col = (...names) => { for (const n of names) { const i = header.indexOf(n); if (i >= 0) return i; } return -1; };
                         const cStart = col('startdatum', 'datum'), cEind = col('einddatum'),
                               cStartUur = col('startuur', 'van'), cEindUur = col('einduur', 'tot'),
-                              cModus = col('modus'), cTitel = col('titel'), cTekst = col('tekst'), cPdf = col('pdf');
+                              cModus = col('modus'), cTitel = col('titel'), cTekst = col('tekst'), cPdf = col('pdf'),
+                              cPdf1 = col('pdf1'), cPdf2 = col('pdf2'), cTimer = col('timer');
                         if (cStart < 0 || cStartUur < 0 || cEindUur < 0) {
                             console.warn('Meldingen: kolommen startdatum/einddatum/startuur/einduur niet gevonden', header);
                             return [];
@@ -683,13 +687,16 @@
                             const startdatum = get(row, cStart), einddatum = get(row, cEind);
                             const startuur = get(row, cStartUur), einduur = get(row, cEindUur);
                             const titel = get(row, cTitel), tekst = get(row, cTekst), pdf = get(row, cPdf);
+                            const pdf1 = get(row, cPdf1), pdf2 = get(row, cPdf2), timer = get(row, cTimer);
                             const modus = get(row, cModus).toLowerCase();
-                            if (!startdatum && !einddatum && !startuur && !einduur && !titel && !tekst && !pdf) continue; // lege rij
-                            if (!startuur || !einduur || (!titel && !tekst && !pdf)) continue; // onvolledig
+                            if (!startdatum && !einddatum && !startuur && !einduur && !titel && !tekst && !pdf && !pdf1 && !pdf2) continue; // lege rij
+                            if (!startuur || !einduur || (!titel && !tekst && !pdf && !pdf1 && !pdf2)) continue; // onvolledig
                             meldingen.push({
                                 startdatum, einddatum, startuur, einduur,
                                 modus: (modus === 'volledig' || modus === 'full') ? 'full' : 'split',
                                 titel, tekst, pdf: toEmbeddablePdf(pdf),
+                                // wissel-PDF's: pdf1+pdf2+timer (sec); hebben voorrang op pdf
+                                pdf1: toEmbeddablePdf(pdf1), pdf2: toEmbeddablePdf(pdf2), timer,
                             });
                         }
                         meldingenCache = meldingen;
@@ -787,14 +794,25 @@
             }
 
             let lastMeldingKey = null;
+            let pdfSwapTimer = null;
+
+            function stopPdfSwap() {
+                if (pdfSwapTimer) { clearInterval(pdfSwapTimer); pdfSwapTimer = null; }
+            }
 
             function renderMelding(m) {
+                stopPdfSwap();
+                // pdf1/pdf2 (wissel-PDF's) hebben voorrang op de oude pdf-kolom;
+                // één van beide invullen = statische PDF, beide = afwisselen
+                const pdfLijst = [m.pdf1, m.pdf2].filter(Boolean);
+                const actievePdfs = pdfLijst.length > 0 ? pdfLijst : (m.pdf ? [m.pdf] : []);
+
                 let html = '';
                 if (m.titel) {
                     html += `<div class="melding-head"><h2>${escapeHtml(m.titel)}</h2></div>`;
                 }
                 html += '<div class="melding-body">';
-                if (m.pdf) {
+                if (actievePdfs.length > 0) {
                     if (m.tekst) html += `<div class="tekst">${escapeHtml(m.tekst)}</div>`;
                     html += `<div class="pdf-canvas-container"></div>`;
                 } else if (m.tekst) {
@@ -802,9 +820,19 @@
                 }
                 html += '</div>';
                 meldingPane.innerHTML = html;
-                if (m.pdf) {
+
+                if (actievePdfs.length > 0) {
                     const pdfContainer = meldingPane.querySelector('.pdf-canvas-container');
-                    renderPdf(pdfContainer, m.pdf, m.titel);
+                    renderPdf(pdfContainer, actievePdfs[0], m.titel);
+                    if (actievePdfs.length > 1) {
+                        // elke `timer` seconden wisselen (minimum 3 s, standaard 15 s)
+                        const sec = Math.max(3, parseInt(m.timer, 10) || 15);
+                        let idx = 0;
+                        pdfSwapTimer = setInterval(() => {
+                            idx = (idx + 1) % actievePdfs.length;
+                            renderPdf(pdfContainer, actievePdfs[idx], m.titel);
+                        }, sec * 1000);
+                    }
                 }
             }
 
@@ -812,12 +840,15 @@
                 return fetchMeldingen().then(meldingen => {
                     const now = new Date();
                     const active = findActiveMelding(meldingen, now);
-                    const key = active ? active.startdatum + '|' + active.einddatum + '|' + active.startuur + '|' + active.titel : null;
+                    const key = active
+                        ? [active.startdatum, active.einddatum, active.startuur, active.titel, active.pdf1, active.pdf2, active.timer].join('|')
+                        : null;
 
                     if (key === lastMeldingKey) return; // niets veranderd
 
                     lastMeldingKey = key;
                     if (!active) {
+                        stopPdfSwap();
                         document.body.classList.remove('mode-split', 'mode-full');
                         meldingPane.innerHTML = '';
                         return;
