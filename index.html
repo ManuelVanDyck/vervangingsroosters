@@ -276,6 +276,14 @@
             display: block;
         }
 
+        /* Gepubliceerde presentatie in de melding (iframe vult het paneel) */
+        .pdf-canvas-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #fff;
+        }
+
         /* Drive-thumbnail <img> (fallback, werkt op élke WebView) */
         .pdf-canvas-container.img-mode .pdf-img {
             width: 100%;
@@ -720,14 +728,31 @@
                 return null;
             }
 
-            // ── PDF-rendering ──
+            // ── Inhoud-rendering (PDF's én gepubliceerde presentaties) ──
             // Strategie (robuust op signage-WebViews zoals Pico XI):
+            //  0. Gepubliceerde Google-presentatie (/pub?start=true&loop=true...)
+            //     → <iframe>: Slides opent en loopt zelf, parameters blijven staan
             //  1. Drive-thumbnail <img> — gewoon een afbeelding, geen viewer, geen
             //     CORS, geen fetch. Werkt op élke browser, hoe oud ook.
             //     (toont pagina 1; meerdere pagina's: afzonderlijke melding-rijen)
             //  2. PDF.js canvas (desktop-verfijning): haalt de echte PDF-binair op
             //     en rendert met paging. Gebruikt dezelfde download-URL.
+            function isPublishedSlides(url) {
+                return /docs\.google\.([a-z.]+)\/presentation\/d\/e\/[^/?#]+\/pub/.test(String(url || ''));
+            }
+
             function renderPdf(container, url, thumbnailMode) {
+                // Gepubliceerde presentatie → iframe (auto-start/loop via URL-parameters)
+                if (isPublishedSlides(url)) {
+                    container.innerHTML = '';
+                    container.classList.remove('img-mode');
+                    const iframe = document.createElement('iframe');
+                    iframe.src = String(url);
+                    iframe.title = thumbnailMode || 'Presentatie';
+                    container.appendChild(iframe);
+                    return;
+                }
+
                 const urls = drivePdfUrls(url);
                 const downloadUrl = urls.downloadUrl;
                 const fileId = urls.fileId;
