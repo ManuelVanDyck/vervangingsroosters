@@ -728,27 +728,41 @@
                 return null;
             }
 
-            // ── Inhoud-rendering (PDF's én gepubliceerde presentaties) ──
+            // ── Inhoud-rendering (PDF's én Google-presentaties) ──
             // Strategie (robuust op signage-WebViews zoals Pico XI):
-            //  0. Gepubliceerde Google-presentatie (/pub?start=true&loop=true...)
-            //     → <iframe>: Slides opent en loopt zelf, parameters blijven staan
+            //  0. Google-presentatie → <iframe> via het /embed-formaat
+            //     (de /pub "publiceren op het web"-URL stuurt X-Frame-Options:
+            //     SAMEORIGIN en weigert in andermans iframe; een gewone deel-link
+            //     met /embed werkt wél — we bouwen die hier automatisch)
             //  1. Drive-thumbnail <img> — gewoon een afbeelding, geen viewer, geen
             //     CORS, geen fetch. Werkt op élke browser, hoe oud ook.
             //     (toont pagina 1; meerdere pagina's: afzonderlijke melding-rijen)
             //  2. PDF.js canvas (desktop-verfijning): haalt de echte PDF-binair op
             //     en rendert met paging. Gebruikt dezelfde download-URL.
-            function isPublishedSlides(url) {
-                return /docs\.google\.([a-z.]+)\/presentation\/d\/e\/[^/?#]+\/pub/.test(String(url || ''));
+            function presentationEmbedUrl(url) {
+                const u = String(url || '').trim();
+                // al een /embed- of /pub-URL? → ongewijzigd laten (pub-params bewaren)
+                if (/docs\.google\.[a-z.]+\/presentation\/d\/e\/[^/?#]+\/pub/.test(u)) return u;
+                if (/docs\.google\.[a-z.]+\/presentation\/d\/[A-Za-z0-9_-]+\/embed/.test(u)) return u;
+                // gewone deel-link (.../d/<ID>/edit?usp=sharing of /view) → /embed met autoplay
+                const m = u.match(/^(https:\/\/docs\.google\.[a-z.]+\/presentation\/d\/([A-Za-z0-9_-]+))/);
+                if (m) {
+                    const delay = (u.match(/[?&]delayms=(\d+)/) || [])[1] || '10000';
+                    return m[1] + '/embed?start=true&loop=true&delayms=' + delay;
+                }
+                return null;
             }
 
             function renderPdf(container, url, thumbnailMode) {
-                // Gepubliceerde presentatie → iframe (auto-start/loop via URL-parameters)
-                if (isPublishedSlides(url)) {
+                // Google-presentatie → iframe (auto-start/loop)
+                const slidesUrl = presentationEmbedUrl(url);
+                if (slidesUrl) {
                     container.innerHTML = '';
                     container.classList.remove('img-mode');
                     const iframe = document.createElement('iframe');
-                    iframe.src = String(url);
+                    iframe.src = slidesUrl;
                     iframe.title = thumbnailMode || 'Presentatie';
+                    iframe.allow = 'autoplay';
                     container.appendChild(iframe);
                     return;
                 }
